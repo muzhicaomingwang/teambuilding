@@ -83,6 +83,12 @@ Event storming is a rapid, lightweight workshop method for exploring complex bus
 6. **前端工程师** - Designs frontend implementation
 7. **后端工程师** - Implements backend layers (Adapter → Application → Domain → Repository)
 
+#### **新增角色（第2轮事件风暴）**
+
+8. **QA质量保证专家** - Ensures system quality, reliability and compliance through testing
+9. **OPS运维专家** - Manages infrastructure, deployment, monitoring and 24/7 operations
+10. **DBA数据库管理员** - Designs database architecture, performance optimization and data management
+
 ### Event Storming Outputs
 
 The event storming session produces detailed documentation in the `/docs/event-storming/` directory:
