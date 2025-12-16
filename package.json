@@ -1,0 +1,22 @@
+{
+  "name": "team-building-assistant",
+  "version": "1.0.0",
+  "description": "A comprehensive tool to help organizations plan, manage, and execute team building activities effectively",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "node index.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "team-building",
+    "assistant",
+    "corporate",
+    "activities",
+    "management"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {},
+  "devDependencies": {}
+}
