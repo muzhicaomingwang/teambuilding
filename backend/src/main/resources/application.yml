@@ -1,0 +1,246 @@
+# 团建助手后端配置文件 (第一期MVP专用)
+spring:
+  # 应用名称
+  application:
+    name: team-building-assistant
+
+  # 数据库配置
+  datasource:
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:team_building_mvp}
+    username: ${DB_USERNAME:postgres}
+    password: ${DB_PASSWORD:postgres}
+    driver-class-name: org.postgresql.Driver
+    # 连接池配置
+    hikari:
+      maximum-pool-size: ${DB_POOL_MAX:20}
+      minimum-idle: ${DB_POOL_MIN:5}
+      connection-timeout: ${DB_TIMEOUT:30000}
+      idle-timeout: ${DB_IDLE_TIMEOUT:600000}
+      max-lifetime: ${DB_MAX_LIFETIME:1800000}
+      leak-detection-threshold: ${DB_LEAK_DETECTION:60000}
+
+  # JPA配置
+  jpa:
+    database-platform: org.hibernate.dialect.PostgreSQLDialect
+    hibernate:
+      ddl-auto: ${JPA_DDL_AUTO:validate}
+      naming:
+        physical-strategy: org.hibernate.boot.model.naming.PhysicalNamingStrategyStandardImpl
+    show-sql: ${JPA_SHOW_SQL:false}
+    properties:
+      hibernate:
+        format_sql: true
+        use_sql_comments: true
+        generate_statistics: ${JPA_GENERATE_STATS:false}
+        jdbc:
+          batch_size: 20
+        order_inserts: true
+        order_updates: true
+        query:
+          plan_cache_max_size: 2048
+          plan_parameter_metadata_max_size: 128
+
+  # Redis配置 (可选，用于缓存)
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+      database: ${REDIS_DB:0}
+      timeout: 2000ms
+      lettuce:
+        pool:
+          max-active: 8
+          max-idle: 8
+          min-idle: 0
+
+  # 缓存配置
+  cache:
+    type: redis
+    redis:
+      time-to-live: 3600000 # 1小时
+      cache-null-values: true
+
+  # 文件上传配置
+  servlet:
+    multipart:
+      max-file-size: 10MB
+      max-request-size: 50MB
+
+  # JSON序列化配置
+  jackson:
+    serialization:
+      write-dates-as-timestamps: false
+      indent-output: true
+    serialization-inclusion: non_null
+    date-format: yyyy-MM-dd'T'HH:mm:ss
+    time-zone: UTC
+
+# 服务器配置
+server:
+  port: ${SERVER_PORT:8080}
+  servlet:
+    context-path: /
+  compression:
+    enabled: true
+    mime-types: application/json,application/xml,text/html,text/xml,text/plain,application/javascript,text/css
+
+# JWT配置
+jwt:
+  secret: ${JWT_SECRET:my-256-bit-secret}
+  expiration: ${JWT_EXPIRATION:1800} # 30分钟
+  refresh-expiration: ${JWT_REFRESH_EXPIRATION:604800} # 7天
+  issuer: ${JWT_ISSUER:team-building-assistant}
+  audience: ${JWT_AUDIENCE:team-building-users}
+
+# Anthropic Claude API配置 (对应功能F38-F43)
+anthropic:
+  api:
+    key: ${ANTHROPIC_API_KEY:}
+    url: https://api.anthropic.com/v1/messages
+    model: ${ANTHROPIC_MODEL:claude-3-sonnet-20240229}
+    max-token: ${ANTHROPIC_MAX_TOKENS:2048}
+    temperature: ${ANTHROPIC_TEMPERATURE:0.7}
+    timeout: ${ANTHROPIC_TIMEOUT:30s}
+    cache-enabled: ${ANTHROPIC_CACHE_ENABLED:true}
+    cache-ttl: ${ANTHROPIC_CACHE_TTL:14400} # 4小时
+
+# 业务配置
+app:
+  name: 团建助手
+  version: 1.0.0
+  description: 企业团建活动策划平台 (MVP版本)
+
+  # 功能开关
+  features:
+    ai-recommendation: ${FEATURE_AI_RECOMMENDATION:true}
+    time-coordination: ${FEATURE_TIME_COORDINATION:true}
+    file-upload: ${FEATURE_FILE_UPLOAD:false} # MVP版本暂不支持
+    analytics: ${FEATURE_ANALYTICS:false}
+    rate-limiting: ${FEATURE_RATE_LIMITING:true}
+
+  # MVP限制配置
+  limits:
+    max-activities-per-team: ${MAX_ACTIVITIES_PER_TEAM:100}
+    max-team-members: ${MAX_TEAM_MEMBERS:500}
+    max-participants-per-activity: ${MAX_PARTICIPANTS:500}
+    max-ai-recommendations-per-hour: ${MAX_AI_RECOMMENDATIONS:20}
+    max-invitations-per-day: ${MAX_INVITATIONS_PER_DAY:50}
+
+  # 推荐配置
+  recommendation:
+    min-results: 3
+    max-results: 5
+    default-confidence: 0.8
+
+  # 文件上传限制
+  upload:
+    max-file-size: ${MAX_FILE_SIZE:10MB}
+    allowed-extensions: jpg,jpeg,png,gif,pdf,doc,docx
+    storage-path: ${UPLOAD_PATH:/tmp/uploads}
+
+# 日志配置
+logging:
+  level:
+    com.teambuilding: ${LOG_LEVEL:INFO}
+    org.springframework.web: INFO
+    org.hibernate.SQL: DEBUG
+    org.hibernate.type.descriptor.sql.BasicBinder: TRACE
+    org.springframework.security: DEBUG
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss} - %msg%n"
+    file: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
+  file:
+    path: ${LOG_PATH:logs}
+    name: ${spring.application.name}.log
+    max-size: 10MB
+    max-history: 30
+
+# 监控配置
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+      base-path: /actuator
+  endpoint:
+    health:
+      show-details: always
+      show-components: always
+    prometheus:
+      enabled: true
+  metrics:
+    export:
+      prometheus:
+        enabled: true
+    tags:
+      application: ${spring.application.name}
+      environment: ${spring.profiles.active:default}
+  health:
+    db:
+      enabled: true
+    redis:
+      enabled: true
+    diskspace:
+      enabled: true
+
+# 错误处理配置
+error:
+  # 错误响应配置
+  include-message: always
+  include-binding-errors: always
+  include-stacktrace: on_param
+  include-exception: false
+
+# CORS配置
+cors:
+  allowed-origins: ${CORS_ORIGINS:http://localhost:3000,http://localhost:5173}
+  allowed-methods: GET, POST, PUT, DELETE, PATCH, OPTIONS
+  allowed-headers: "*"
+  exposed-headers: X-Total-Count, X-Total-Pages, X-Current-Page
+  max-age: 3600
+  allow-credentials: true
+
+# 限流配置 (对应功能S01安全基础测试)
+rate-limit:
+  enabled: ${RATE_LIMIT_ENABLED:true}
+  key-prefix: rate_limit
+  redis-key-prefix: rl
+  cache-config:
+    - key: login
+      limit: 10
+      period: 3600  # 每小时10次登录尝试
+    - key: register
+      limit: 5
+      period: 3600  # 每小时5次注册
+    - key: api
+      limit: 600
+      period: 60    # 每分钟600次API请求
+    - key: ai-recommendation
+      limit: ${MAX_AI_RECOMMENDATIONS:20}
+      period: 3600  # 每小时20次AI推荐
+
+# SpringDoc OpenAPI配置
+springdoc:
+  api-docs:
+    enabled: true
+    path: /api-docs
+  swagger-ui:
+    enabled: ${SWAGGER_ENABLED:true}
+    path: /swagger-ui.html
+    operations-sorter: method
+    tags-sorter: alpha
+    display-request-duration: true
+    disable-swagger-default-url: true
+  info:
+    title: 团建助手API
+    description: 企业团建活动策划平台MVP版本API
+    version: 1.0.0
+    contact:
+      name: API支持团队
+      email: api@teambuilding.com
+    license:
+      name: MIT
+      url: https://opensource.org/licenses/MIT
+  security:
+    - bearerAuth: []

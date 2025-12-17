@@ -1,0 +1,604 @@
+# 团建助手项目 Prometheus 告警规则配置
+# 包含业务告警和技术告警规则
+
+groups:
+  # 业务告警规则
+  - name: business_rules
+    interval: 30s
+    rules:
+      # 用户注册相关告警
+      - alert: HighRegistrationFailureRate
+        expr: |
+          (
+            rate(user_registered_total{status="failed"}[5m]) /
+            rate(user_registered_total[5m])
+          ) > 0.05
+        for: 5m
+        labels:
+          severity: critical
+          team: business
+          category: user
+          product: team-building
+        annotations:
+          summary: "用户注册失败率超过5%"
+          description: "过去5分钟用户注册失败率为 {{ $value | humanizePercentage }}"
+          runbook_url: "https://wiki.team-building.com/runbooks/high-registration-failure"
+          dashboard_url: "https://grafana.team-building.com/d/user-metrics"
+          action_needed: "检查用户认证服务和数据库连接"
+          escalation: "立即通知业务团队负责人"
+
+      - alert: LowUserRegistrationRate
+        expr: |
+          rate(user_registered_total[1h]) < 10
+        for: 30m
+        labels:
+          severity: warning
+          team: business
+          category: user
+        annotations:
+          summary: "用户注册率过低"
+          description: "过去1小时注册用户数: {{ $value | humanize }}"
+          action_needed: "检查推广渠道和用户界面"
+
+      # 活动业务告警
+      - alert: LowActivityCompletionRate
+        expr: |
+          (
+            rate(activity_created_total{status="completed"}[1h]) /
+            rate(activity_created_total[1h])
+          ) < 0.3
+        for: 15m
+        labels:
+          severity: warning
+          team: business
+          category: activity
+        annotations:
+          summary: "活动完成率低于30%"
+          description: "过去1小时活动完成率: {{ $value | humanizePercentage }}"
+          action_needed: "分析活动创建流程和用户体验"
+
+      - alert: ZeroActivityCreation
+        expr: |
+          rate(activity_created_total[2h]) == 0
+        for: 10m
+        labels:
+          severity: critical
+          team: business
+          category: activity
+        annotations:
+          summary: "活动创建量为零"
+          description: "过去2小时无活动创建"
+          action_needed: "紧急检查后端服务和数据库状态"
+
+      # AI推荐业务告警
+      - alert: AIRecommendationAccuracyLow
+        expr: |
+          (
+            rate(ai_recommendation_total{result="accepted"}[1h]) /
+            rate(ai_recommendation_total[1h])
+          ) < 0.6
+        for: 10m
+        labels:
+          severity: warning
+          team: ai
+          category: recommendation
+        annotations:
+          summary: "AI推荐准确率低于60%"
+          description: "当前推荐准确率: {{ $value | humanizePercentage }}"
+          action_needed: "检查AI模型性能和推荐算法"
+
+      - alert: AIRecommendationLatencyHigh
+        expr: |
+          histogram_quantile(0.95,
+            rate(ai_recommendation_duration_seconds_bucket[5m])) > 5
+        for: 3m
+        labels:
+          severity: critical
+          team: ai
+          category: performance
+        annotations:
+          summary: "AI推荐响应时间P95超过5秒"
+          description: "95%请求响应时间: {{ $value }}s"
+          action_needed: "检查AI服务性能和API调用情况"
+
+      - alert: ClaudeAPIQuotaWarning
+        expr: |
+          (claude_api_quota_remaining / claude_api_quota_total) < 0.2
+        for: 5m
+        labels:
+          severity: warning
+          team: ai
+          category: api
+        annotations:
+          summary: "Claude API配额剩余不足20%"
+          description: "API配额剩余: {{ $value | humanizePercentage }}"
+          action_needed: "联系供应商增加配额或优化调用"
+
+      # 用户留存告警
+      - alert: UserRetentionDrop
+        expr: |
+          (user_retention_7d[1d] offset 1d - user_retention_7d[1d]) /
+          (user_retention_7d[1d] offset 1d) > 0.1
+        for: 1h
+        labels:
+          severity: warning
+          team: business
+          category: retention
+        annotations:
+          summary: "7日用户留存率下降超过10%"
+          description: "留存率从昨日下降: {{ $value | humanizePercentage }}"
+          action_needed: "分析用户行为和产品质量"
+
+  # 技术性能告警
+  - name: application_rules
+    interval: 15s
+    rules:
+      # HTTP 请求告警
+      - alert: HighErrorRate
+        expr: |
+          (
+            rate(http_requests_total{status=~"5.."}[5m]) /
+            rate(http_requests_total[5m])
+          ) > 0.01
+        for: 5m
+        labels:
+          severity: critical
+          team: backend
+          category: api
+        annotations:
+          summary: "API错误率超过1%"
+          description: "服务 {{ $labels.endpoint }} 错误率 {{ $value | humanizePercentage }}"
+          action_needed: "检查应用日志和异常情况"
+
+      - alert: HighLatency
+        expr: |
+          histogram_quantile(0.95,
+            rate(http_request_duration_seconds_bucket[5m])) > 0.5
+        for: 5m
+        labels:
+          severity: warning
+          team: backend
+          category: performance
+        annotations:
+          summary: "API响应时间P95超过500ms"
+          description: "{{ $labels.endpoint }} P95延迟: {{ $value }}s"
+          action_needed: "检查数据库查询和外部服务调用"
+
+      - alert: VeryHighLatency
+        expr: |
+          histogram_quantile(0.99,
+            rate(http_request_duration_seconds_bucket[1m])) > 2
+        for: 2m
+        labels:
+          severity: critical
+          team: backend
+          category: performance
+        annotations:
+          summary: "API响应时间P99超过2秒"
+          description: "{{ $labels.endpoint }} P99延迟: {{ $value }}s"
+          action_needed: "性能紧急优化"
+
+      # 数据库连接告警
+      - alert: DatabaseConnectionPoolExhausted
+        expr: |
+          (hikaricp_connections_active / hikaricp_connections_max) > 0.9
+        for: 5m
+        labels:
+          severity: critical
+          team: backend
+          category: database
+        annotations:
+          summary: "数据库连接池即将耗尽"
+          description: "连接池使用率: {{ $value | humanizePercentage }}"
+          action_needed: "检查慢查询和连接泄漏"
+
+      - alert: DatabaseQuerySlow
+        expr: |
+          histogram_quantile(0.95,
+            rate(hibernate_statement_duration_seconds_bucket[5m])) > 0.1
+        for: 10m
+        labels:
+          severity: warning
+          team: backend
+          category: database
+        annotations:
+          summary: "数据库查询P95超过100ms"
+          description: "数据库查询P95: {{ $value }}s"
+          action_needed: "优化SQL查询或增加索引"
+
+      # JVM 内存告警
+      - alert: JVMHeapHighUsage
+        expr: |
+          (jvm_memory_used_bytes{area="heap"} /
+           jvm_memory_max_bytes{area="heap"}) > 0.9
+        for: 10m
+        labels:
+          severity: warning
+          team: backend
+          category: jvm
+        annotations:
+          summary: "JVM堆内存使用率超过90%"
+          description: "堆内存使用率: {{ $value | humanizePercentage }}"
+          action_needed: "检查内存泄漏或调整JVM参数"
+
+      - alert: JVMGCOverhead
+        expr: |
+          rate(jvm_gc_collection_seconds_sum[5m]) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+          team: backend
+          category: jvm
+        annotations:
+          summary: "JVM GC开销过高"
+          description: "GC时间占比: {{ $value | humanizePercentage }}"
+          action_needed: "增加堆内存或优化代码"
+
+      # 容器级别告警
+      - alert: PodCrashLooping
+        expr: |
+          rate(kube_pod_container_status_restarts_total[15m]) > 0.1
+        for: 10m
+        labels:
+          severity: critical
+          team: ops
+          category: kubernetes
+        annotations:
+          summary: "Pod频繁重启"
+          description: "{{ $labels.namespace }}/{{ $labels.pod }} 15分钟内重启 {{ $value }} 次"
+          action_needed: "检查容器日志和配置"
+
+      - alert: PodNotReady
+        expr: |
+          kube_pod_status_phase{phase=~"Pending|Unknown"} == 1
+        for: 15m
+        labels:
+          severity: critical
+          team: ops
+          category: kubernetes
+        annotations:
+          summary: "Pod长时间未就绪"
+          description: "Pod {{ $labels.pod }} 状态: {{ $labels.phase }}"
+          action_needed: "检查Pod事件和资源限制"
+
+  # 基础设施告警
+  - name: infrastructure_rules
+    interval: 30s
+    rules:
+      # 节点资源告警
+      - alert: NodeHighCPUUsage
+        expr: |
+          (1 - rate(node_cpu_seconds_total{mode="idle"}[5m])) * 100 > 90
+        for: 10m
+        labels:
+          severity: warning
+          team: ops
+          category: node
+        annotations:
+          summary: "节点CPU使用率超过90%"
+          description: "节点 {{ $labels.instance }} CPU使用率: {{ $value }}%"
+          action_needed: "检查高CPU进程或扩容"
+
+      - alert: NodeHighMemoryUsage
+        expr: |
+          (1 - (node_memory_MemAvailable_bytes /
+           node_memory_MemTotal_bytes)) * 100 > 90
+        for: 10m
+        labels:
+          severity: warning
+          team: ops
+          category: node
+        annotations:
+          summary: "节点内存使用率超过90%"
+          description: "节点 {{ $labels.instance }} 内存使用率: {{ $value }}%"
+          action_needed: "检查内存使用或扩容"
+
+      - alert: NodeDiskSpaceWarning
+        expr: |
+          (node_filesystem_avail_bytes{fstype!~"tmpfs|fuse.lxcfs|squashfs",mountpoint="/"} /
+           node_filesystem_size_bytes{fstype!~"tmpfs|fuse.lxcfs|squashfs",mountpoint="/"}) * 100 < 20
+        for: 5m
+        labels:
+          severity: warning
+          team: ops
+          category: storage
+        annotations:
+          summary: "节点磁盘空间不足"
+          description: "节点 {{ $labels.instance }} 磁盘剩余: {{ $value }}%"
+          action_needed: "清理日志或扩容磁盘"
+
+      - alert: NodeDiskSpaceCritical
+        expr: |
+          (node_filesystem_avail_bytes{fstype!~"tmpfs|fuse.lxcfs|squashfs",mountpoint="/"} /
+           node_filesystem_size_bytes{fstype!~"tmpfs|fuse.lxcfs|squashfs",mountpoint="/"}) * 100 < 10
+        for: 2m
+        labels:
+          severity: critical
+          team: ops
+          category: storage
+        annotations:
+          summary: "节点磁盘空间严重不足"
+          description: "节点 {{ $labels.instance }} 磁盘剩余: {{ $value }}%"
+          action_needed: "立即清理或扩容"
+
+      # 网络告警
+      - alert: HighNetworkReceive
+        expr: |
+          rate(node_network_receive_bytes_total[5m]) > 100 * 1024 * 1024
+        for: 10m
+        labels:
+          severity: info
+          team: ops
+          category: network
+        annotations:
+          summary: "网络接收流量高"
+          description: "{{ $labels.instance }} 接收流量: {{ $value | humanize }}B/s"
+
+      # 系统负载告警
+      - alert: HighSystemLoad
+        expr: |
+          node_load1 / on(instance) (
+            count by (instance) (node_cpu_seconds_total{mode="idle"})
+          ) > 2
+        for: 5m
+        labels:
+          severity: warning
+          team: ops
+          category: system
+        annotations:
+          summary: "系统负载过高"
+          description: "平均负载/CPU核数: {{ $value }}"
+
+  # Redis 数据库告警
+  - name: redis_rules
+    interval: 30s
+    rules:
+      - alert: RedisDown
+        expr: |
+          redis_up == 0
+        for: 1m
+        labels:
+          severity: critical
+          team: backend
+          category: cache
+        annotations:
+          summary: "Redis服务不可用"
+          description: "Redis实例 {{ $labels.instance }} 已宕机"
+          action_needed: "立即检查Redis服务状态"
+
+      - alert: RedisHighUsedMemory
+        expr: |
+          (redis_memory_used_bytes / redis_memory_max_bytes) > 0.9
+        for: 10m
+        labels:
+          severity: warning
+          team: backend
+          category: cache
+        annotations:
+          summary: "Redis内存使用率超过90%"
+          description: "内存使用率: {{ $value | humanizePercentage }}"
+          action_needed: "清理过期key或扩容内存"
+
+      - alert: RedisHighConnections
+        expr: |
+          redis_connected_clients / redis_config_maxclients > 0.8
+        for: 5m
+        labels:
+          severity: warning
+          team: backend
+          category: cache
+        annotations:
+          summary: "Redis连接数过多"
+          description: "连接数占比: {{ $value | humanizePercentage }}"
+          action_needed: "检查连接泄露或增加最大连接数"
+
+      - alert: RedisRejectedConnections
+        expr: |
+          increase(redis_rejected_connections_total[5m]) > 0
+        for: 1m
+        labels:
+          severity: warning
+          team: backend
+          category: cache
+        annotations:
+          summary: "Redis拒绝连接"
+          description: "过去5分钟拒绝连接: {{ $value }} 次"
+          action_needed: "检查连接数和系统限制"
+
+  # PostgreSQL 数据库告警
+  - name: postgres_rules
+    interval: 30s
+    rules:
+      - alert: PostgreSQLDown
+        expr: |
+          pg_exporter_last_scrape_error == 1
+        for: 2m
+        labels:
+          severity: critical
+          team: backend
+          category: database
+        annotations:
+          summary: "PostgreSQL监控失败"
+          description: "无法连接到PostgreSQL数据库"
+          action_needed: "检查数据库连接和权限"
+
+      - alert: PostgreSQLHighConnections
+        expr: |
+          pg_stat_activity_count / pg_settings_max_connections > 0.8
+        for: 5m
+        labels:
+          severity: warning
+          team: backend
+          category: database
+        annotations:
+          summary: "PostgreSQL连接数过多"
+          description: "连接数占比: {{ $value | humanizePercentage }}"
+          action_needed: "检查连接池配置或扩容"
+
+      - alert: PostgreSQLReplicationLag
+        expr: |
+          pg_replication_lag > 60
+        for: 5m
+        labels:
+          severity: warning
+          team: backend
+          category: database
+        annotations:
+          summary: "PostgreSQL复制延迟过高"
+          description: "复制延迟: {{ $value }}s"
+          action_needed: "检查从库性能和网络状况"
+
+  # 监控组件自身告警
+  - name: monitoring_rules
+    interval: 30s
+    rules:
+      - alert: PrometheusScrapingFailure
+        expr: |
+          up == 0
+        for: 5m
+        labels:
+          severity: critical
+          team: ops
+          category: monitoring
+        annotations:
+          summary: "Prometheus无法抓取目标"
+          description: "Job {{ $labels.job }} 实例 {{ $labels.instance }} 无法访问"
+          action_needed: "检查目标服务状态和配置"
+
+      - alert: PrometheusScrapingSlow
+        expr: |
+          scrape_duration_seconds > 10
+        for: 10m
+        labels:
+          severity: warning
+          team: ops
+          category: monitoring
+        annotations:
+          summary: "Prometheus抓取时间过长"
+          description: "{{ $labels.job }} 抓取耗时: {{ $value }}s"
+          action_needed: "检查网络或目标性能"
+
+      - alert: PrometheusTargetMissing
+        expr: |
+          prometheus_sd_discovered_targets < prometheus_sd_config_targets
+        for: 10m
+        labels:
+          severity: warning
+          team: ops
+          category: monitoring
+        annotations:
+          summary: "Prometheus发现目标数少于配置"
+          description: "发现目标: {{ $value }}, 配置目标: {{ $labels.config }}"
+          action_needed: "检查服务发现配置"
+
+      - alert: PrometheusStorageFilling
+        expr: |
+          (prometheus_tsdb_storage_blocks_bytes /
+           prometheus_tsdb_retention_size_bytes) > 0.8
+        for: 5m
+        labels:
+          severity: warning
+          team: ops
+          category: monitoring
+        annotations:
+          summary: "Prometheus存储空间使用超过80%"
+          description: "存储使用率: {{ $value | humanizePercentage }}"
+          action_needed: "调整保留时间或扩容存储"
+
+      - alert: AlertmanagerConfigReloadFailed
+        expr: |
+          alertmanager_config_last_reload_successful == 0
+        for: 5m
+        labels:
+          severity: warning
+          team: ops
+          category: monitoring
+        annotations:
+          summary: "Alertmanager配置重载失败"
+          description: "配置文件可能存在语法错误"
+          action_needed: "检查Alertmanager配置并在修复后重载"""}
+
+  # 记录规则（Recording Rules）
+  - name: recording_rules
+    interval: 60s
+    rules:
+      # 聚合错误率
+      - record: api:error_rate
+        expr: |
+          rate(http_requests_total{status=~"5.."}[5m]) by (job, instance)
+
+      - record: api:success_rate
+        expr: |
+          rate(http_requests_total{status!~"5.."}[5m]) by (job, instance) /
+          rate(http_requests_total[5m]) by (job, instance)
+
+      # 聚合响应时间
+      - record: api:latency_p50
+        expr: |
+          histogram_quantile(0.5,
+            rate(http_request_duration_seconds_bucket[5m])) by (job, instance)
+
+      - record: api:latency_p95
+        expr: |
+          histogram_quantile(0.95,
+            rate(http_request_duration_seconds_bucket[5m])) by (job, instance)
+
+      - record: api:latency_p99
+        expr: |
+          histogram_quantile(0.99,
+            rate(http_request_duration_seconds_bucket[5m])) by (job, instance)
+
+      # 业务指标记录
+      - record: business:user_registration_rate
+        expr: |
+          rate(user_registered_total[5m])
+
+      - record: business:activity_creation_rate
+        expr: |
+          rate(activity_created_total[5m])
+
+      - record: business:activity_completion_rate
+        expr: |
+          rate(activity_created_total{status="completed"}[5m]) /
+          rate(activity_created_total[5m])
+
+      - record: business:ai_recommendation_accuracy
+        expr: |
+          rate(ai_recommendation_total{result="accepted"}[5m]) /
+          rate(ai_recommendation_total[5m])
+
+      # 系统资源使用率
+      - record: node:cpu_utilization
+        expr: |
+          1 - rate(node_cpu_seconds_total{mode="idle"}[5m])
+
+      - record: node:memory_utilization
+        expr: |
+          1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)
+
+      - record: node:disk_utilization
+        expr: |
+          1 - (node_filesystem_avail_bytes / node_filesystem_size_bytes)
+
+      # 容器级别聚合
+      - record: container:memory_usage_percent
+        expr: |
+          container_memory_usage_bytes / container_spec_memory_limit_bytes
+
+      - record: container:cpu_usage_percent
+        expr: |
+          rate(container_cpu_usage_seconds_total[5m]) * 100
+
+      # 数据库连接聚合
+      - record: database:connection_usage
+        expr: |
+          (hikaricp_connections_active / hikaricp_connections_max)
+
+      # JVM 内存使用聚合
+      - record: jvm:heap_usage
+        expr: |
+          jvm_memory_used_bytes{area="heap"} / jvm_memory_max_bytes{area="heap"}
+
+      - record: jvm:gc_rate
+        expr: |
+          rate(jvm_gc_collection_seconds_total[5m])

@@ -1,0 +1,218 @@
+# Prometheus 配置文件
+# 适用于团建助手项目监控系统
+
+global:
+  scrape_interval: 15s        # 全局默认抓取间隔
+  evaluation_interval: 15s    # 规则评估间隔
+  external_labels:
+    cluster: 'team-building'
+    replica: 'prometheus-1'
+
+# 告警管理
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets:
+            - alertmanager:9093
+      timeout: 10s
+
+# 规则文件
+rule_files:
+  - "/etc/prometheus/alert-rules.yml"
+  - "/etc/prometheus/recording-rules.yml"
+
+# 抓取配置
+scrape_configs:
+  # Prometheus 自身监控
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+    scrape_interval: 5s
+    metrics_path: /metrics
+    params:
+      collect[]:
+        - go
+        - process
+        - promhttp
+
+  # Node Exporter - 主机监控
+  - job_name: 'node'
+    static_configs:
+      - targets:
+          - 'node-exporter:9100'
+        labels:
+          instance: 'docker-host'
+    scrape_interval: 15s
+    scrape_timeout: 10s
+    metrics_path: /metrics
+
+  # cAdvisor - Docker 容器监控
+  - job_name: 'cadvisor'
+    static_configs:
+      - targets: ['cadvisor:8080']
+    scrape_interval: 15s
+    scrape_timeout: 10s
+    metrics_path: /metrics
+
+  # 团建助手后端应用监控
+  - job_name: 'team-building-api'
+    static_configs:
+      - targets: ['app:8081']
+        labels:
+          __metrics_path__ : /actuator/prometheus
+          application: 'team-building'
+          environment: 'production'
+          tier: 'backend'
+          service: 'api'
+    scrape_interval: 15s
+    metrics_path: /actuator/prometheus
+    scrape_timeout: 10s
+    honor_labels: true
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [__param_target]
+        target_label: instance
+      - target_label: __address__
+        replacement: app:8081
+
+  # Redis Exporter
+  - job_name: 'redis'
+    static_configs:
+      - targets: ['redis-exporter:9121']
+    scrape_interval: 15s
+    metrics_path: /metrics
+
+  # PostgreSQL Exporter
+  - job_name: 'postgres'
+    static_configs:
+      - targets: ['postgres-exporter:9187']
+    scrape_interval: 15s
+    metrics_path: /metrics
+
+  # Pushgateway - 自定义业务指标
+  - job_name: 'pushgateway'
+    static_configs:
+      - targets: ['pushgateway:9091']
+    scrape_interval: 15s
+    metrics_path: /metrics
+    honor_labels: true
+
+  # Blackbox Exporter - 外部探测
+  - job_name: 'blackbox-http'
+    metrics_path: /probe
+    params:
+      module: [http_2xx]
+    static_configs:
+      - targets:
+          - 'http://app:8080/actuator/health'
+          - 'http://app:8080/api/v1/activities'
+        labels:
+          service: 'team-building-api'
+          environment: 'production'
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [__param_target]
+        target_label: instance
+      - target_label: __address__
+        replacement: blackbox-exporter:9115
+
+  # Kubernetes 相关监控（如运行在K8s环境）
+  # - job_name: 'kubernetes-apiservers'
+  #   kubernetes_sd_configs:
+  #     - role: endpoints
+  #   scheme: https
+  #   tls_config:
+  #     ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+  #   bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+  #   relabel_configs:
+  #     - source_labels: [__meta_kubernetes_namespace, __meta_kubernetes_service_name, __meta_kubernetes_endpoint_port_name]
+  #       action: keep
+  #       regex: default;kubernetes;https
+
+  # - job_name: 'kubernetes-nodes'
+  #   kubernetes_sd_configs:
+  #     - role: node
+  #   scheme: https
+  #   tls_config:
+  #     ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+  #   bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+  #   relabel_configs:
+  #     - action: labelmap
+  #       regex: __meta_kubernetes_node_label_(.+)
+
+  # 业务指标专用Job
+  - job_name: 'business-metrics'
+    static_configs:
+      - targets: ['app:8081']
+        labels:
+          metrics_type: 'business'
+    scrape_interval: 30s
+    metrics_path: /actuator/prometheus
+    params:
+      collect[]:
+        - business
+        - user
+        - activity
+        - recommendation
+
+  # 性能指标专用Job
+  - job_name: 'performance-metrics'
+    static_configs:
+      - targets: ['app:8081']
+        labels:
+          metrics_type: 'performance'
+    scrape_interval: 10s
+    metrics_path: /actuator/prometheus
+    params:
+      collect[]:
+        - performance
+        - http
+        - jvm
+        - database
+        - cache
+
+  # AI服务专用监控
+  - job_name: 'ai-service-metrics'
+    static_configs:
+      - targets: ['app:8081']
+        labels:
+          service_type: 'ai'
+          model: 'claude'
+    scrape_interval: 15s
+    metrics_path: /actuator/prometheus
+    params:
+      collect[]:
+        - ai
+        - recommendation
+        - claude_api
+
+# 远程写入配置（可选）
+# remote_write:
+#   - url: "http://thanos-receive:19291/api/v1/receive"
+#     queue_config:
+#       max_samples_per_send: 1000
+#       max_shards: 200
+#       capacity: 2500
+
+# 远程读取配置（可选）
+# remote_read:
+#   - url: "http://thanos-query:10901/api/v1/read"
+#     read_recent: true
+
+# 限制配置
+# storage:
+#   tsdb:
+#     retention.time: 30d
+#     retention.size: 100GB
+#     wal-compression: true
+
+# 安全相关
+# basic_auth_users:
+#   admin: $2y$10$...  # bcrypt hash
+
+# 示例label管理
+# label_limit: 60                      # 每个指标最多60个标签
+# label_name_length_limit: 512         # 标签名最大512字符
+# label_value_length_limit: 2048       # 标签值最大2048字符
