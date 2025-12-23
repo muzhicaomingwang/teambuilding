@@ -195,3 +195,5 @@ A: 本课程目标是让产品人员具备原型开发和技术理解能力，�
 ---
 
 **开始学习**: 请从 [Week 1: AI开发基础](./syllabus.md#week-1-ai开发基础---认识你的ai助手) 开始 🚀
+
+<img width="561" height="316" alt="image" src="https://github.com/user-attachments/assets/cd065e3c-ca0e-4c8c-a00d-e528a8aefd69" />
